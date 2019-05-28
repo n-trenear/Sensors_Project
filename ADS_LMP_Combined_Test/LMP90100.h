@@ -29,5 +29,5 @@
 
 static int  LMP90100_ReadChannel(void);
 static float LMP90100_ReadADC(void);
-static unsigned int LMP90100_DRDY (modbus_t *ctx);
-static void LMP90100_Setup(void);
+unsigned int LMP90100_DRDY (modbus_t *ctx);
+void LMP90100_Setup(void);

@@ -16,6 +16,7 @@
 #include <math.h>
 #include <errno.h>
 #include <modbus.h>
+#include "LMP90100.h"
 
 #define MISO_AUX  19
 #define MOSI_AUX  20
@@ -92,7 +93,7 @@ static float LMP90100_ReadADC(void)
 *	The return value: 1 on success else return 0
 *********************************************************************************************************
 */
-static unsigned int LMP90100_DRDY (modbus_t *ctx)
+unsigned int LMP90100_DRDY (modbus_t *ctx)
 {
 	int Channel;
 	float Temp_Reading;
@@ -145,7 +146,7 @@ static unsigned int LMP90100_DRDY (modbus_t *ctx)
 *	The return value: 1 on success else return 0
 *********************************************************************************************************
 */
-static void LMP90100_Setup(void){
+void LMP90100_Setup(void){
 	uint8_t setup_buf[16];
 
   CS_AUX_0();
