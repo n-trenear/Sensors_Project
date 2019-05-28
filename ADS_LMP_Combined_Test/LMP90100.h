@@ -17,6 +17,16 @@
 #include <errno.h>
 #include <modbus.h>
 
+#define MISO_AUX  19
+#define MOSI_AUX  20
+#define SPICS_AUX 26
+#define CS_AUX_1() bcm2835_gpio_write(SPICS_AUX,HIGH)
+#define CS_AUX_0() bcm2835_gpio_write(SPICS_AUX,LOW)
+#define CS_AUX_IS_LOW()  (bcm2835_gpio_lev(SPICS_AUX) == 0)
+#define CS_AUX_IS_HIGH() (bcm2835_gpio_lev(SPICS_AUX) == 1)
+#define DRDY_AUX_IS_LOW()  (bcm2835_gpio_lev(MISO_AUX)==0)
+#define DRDY_AUX_IS_HIGH() (bcm2835_gpio_lev(MISO_AUX)==1)
+
 static int  LMP90100_ReadChannel(void);
 static float LMP90100_ReadADC(void);
 static unsigned int LMP90100_DRDY (modbus_t *ctx);
