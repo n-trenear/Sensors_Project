@@ -2,7 +2,7 @@
  * ads1256_LMP90100_test.c
  *
  * Created on: 27/03/2019
- * Author: Nahtan Trenear
+ * Author: Nathan Trenear
 */
 
 /*
@@ -25,11 +25,17 @@
 */
 #include <bcm2835.h>
 #include <stdio.h>
+#ifndef _MSC_VER
 #include <unistd.h>
+#include <sys/time.h>
+#endif
 #include <string.h>
+#include <stdlib.h>
 #include <math.h>
 #include <errno.h>
 #include <time.h>
+
+#include <modbus.h>
 
 //CS    -----   SPICS
 //DIN     -----   MOSI
@@ -65,7 +71,7 @@
 #define DRDY_AUX_IS_LOW()  (bcm2835_gpio_lev(MISO_AUX)==0)
 #define DRDY_AUX_IS_HIGH() (bcm2835_gpio_lev(MISO_AUX)==1)
 
-typedef enum {FALSE = 0, TRUE = !FALSE} bool;
+typedef enum {FALSEE = 0, TRUEE = !FALSEE} bool;
 
 /* gain channel� */
 typedef enum{
@@ -246,29 +252,6 @@ static float LMP90100_ReadADC(void)
 
 /*
 *********************************************************************************************************
-*	name: storeTemp
-*	function:  Save temperature reading as csv with time stamp
-*	parameter: Vin : The temperature to be saved
-*
-*	The return value:  NULL
-*********************************************************************************************************
-*/
-void storeTemp(float temp){
-	FILE * fp;
-	fp = fopen ("TemperatureReadings.csv", "a+");
-
-	// store temperature and time
-	time_t t = time(NULL);
-	struct tm tm = *localtime(&t);
-
-	fprintf(fp, "%d-%d-%d %d:%d:%d,%3.1f\n", tm.tm_mday, tm.tm_mon + 1, tm.tm_year + 1900,
-	tm.tm_hour, tm.tm_min, tm.tm_sec, temp);
-
-	fclose(fp);
-}
-
-/*
-*********************************************************************************************************
 *	name: LMP90100_DRDY
 *	function: Detect ADC ready pulse on MISO line and initate ADC read and ADC channel number read
 *	parameter: NULL
@@ -276,26 +259,27 @@ void storeTemp(float temp){
 *	The return value: 1 on success else return 0
 *********************************************************************************************************
 */
-static unsigned int LMP90100_DRDY (void)
+static unsigned int LMP90100_DRDY (modbus_t *ctx)
 {
 	int Channel;
 	float Temp_Reading;
 	int result = 0;
-  static int ctr = 0;
-	//printf("LMP90100_DRDY running \n");
+	static int ctr = 0;
+	uint16_t tab_reg[100];
+	int modbus_register = 3;
+	int rc;
 
 	while(!result){
 	if (DRDY_AUX_IS_LOW() && CS_AUX_IS_LOW())
 	{
-	//printf("DRDY AND CS LOW\n");
   	if (ctr > 1)
     {
-	//printf("ctr > 1 \n");
-    	Temp_Reading = LMP90100_ReadADC();
-      Channel = LMP90100_ReadChannel();
-      //printf("Ch:%02X Temp: %3.1f \r",Channel,Temp_Reading);
-			printf("Ch:%d Temp: %3.1f \n",Channel,Temp_Reading);
-			storeTemp(Temp_Reading);
+		Temp_Reading = LMP90100_ReadADC();
+		Channel = LMP90100_ReadChannel();
+		printf("Ch:%d Temp: %3.1f \n",Channel,Temp_Reading);
+		Temp_Reading = Temp_Reading * 10;
+		tab_reg[0] = (uint16_t) Temp_Reading;
+		rc = modbus_write_registers(ctx, 1000+modbus_register, 1, tab_reg);
       ctr = 0;
       result = 1;
     }
@@ -308,12 +292,10 @@ static unsigned int LMP90100_DRDY (void)
 
 	if (DRDY_AUX_IS_HIGH() && CS_AUX_IS_LOW())
 	{
-		//printf("DRDY high CS low\n");
 		ctr++;
 	}
 	if (DRDY_AUX_IS_HIGH() && CS_AUX_IS_HIGH() && (ctr >= 1))
 	{
-		//printf("DRDY low CS high\n");
 		ctr = 0;
 	}
 }
@@ -323,7 +305,7 @@ static unsigned int LMP90100_DRDY (void)
 
 /*
 *********************************************************************************************************
-*	name: LMP90100_DRDY
+*	name: LMP90100_Setup
 *	function: Detect ADC ready pulse on MISO line and initate ADC read and ADC channel number read
 *	parameter: NULL
 *
@@ -357,14 +339,14 @@ static void LMP90100_Setup(void){
 
 /*
 *********************************************************************************************************
-*	name: LMP90100_DRDY
+*	name: LMP90100_DispTemp
 *	function: Detect ADC ready pulse on MISO line and initate ADC read and ADC channel number read
 *	parameter: NULL
 *
 *	The return value: 1 on success else return 0
 *********************************************************************************************************
 */
-static void LMP90100_DispTemp(void){
+static void LMP90100_DispTemp(modbus_t *ctx){
 		unsigned int cs_state = 1;
 
 		//if (LMP90100_DRDY())
@@ -374,7 +356,7 @@ static void LMP90100_DispTemp(void){
 			cs_state = 0;
 		}
 
-		if (LMP90100_DRDY())
+		if (LMP90100_DRDY(ctx))
 		{
 			if (cs_state == 0)
 			{
@@ -541,22 +523,6 @@ void ADS1256_CfgADC(ADS1256_GAIN_E _gain, ADS1256_DRATE_E _drate){
 
 /*
 *********************************************************************************************************
-*	name: ADS1256_DelayDATA
-*	function: delay
-*	parameter: NULL
-*	The return value: NULL
-*********************************************************************************************************
-*/
-static void ADS1256_DelayDATA(void){
-	/*
-		Delay from last SCLK edge for DIN to first SCLK rising edge for DOUT: RDATA, RDATAC,RREG Commands
-		min  50   CLK = 50 * 0.13uS = 6.5uS
-	*/
-	bsp_DelayUS(10);	/* The minimum time delay 6.5us */
-}
-
-/*
-*********************************************************************************************************
 *	name: ADS1256_Recive8Bit
 *	function: SPI bus receive function
 *	parameter: NULL
@@ -589,29 +555,6 @@ static void ADS1256_WriteReg(uint8_t _RegID, uint8_t _RegValue){
 
 /*
 *********************************************************************************************************
-*	name: ADS1256_ReadReg
-*	function: Read  the corresponding register
-*	parameter: _RegID: register  ID
-*	The return value: read register value
-*********************************************************************************************************
-*/
-static uint8_t ADS1256_ReadReg(uint8_t _RegID){
-	uint8_t read;
-
-	CS_0();	/* SPI  cs  = 0 */
-	ADS1256_Send8Bit(CMD_RREG | _RegID);	/* Write command register */
-	ADS1256_Send8Bit(0x00);	/* Write the register number */
-
-	ADS1256_DelayDATA();	/*delay time */
-
-	read = ADS1256_Recive8Bit();	/* Read the register values */
-	CS_1();	/* SPI   cs  = 1 */
-
-	return read;
-}
-
-/*
-*********************************************************************************************************
 *	name: ADS1256_WriteCmd
 *	function: Sending a single byte order
 *	parameter: _cmd : command
@@ -626,29 +569,13 @@ static void ADS1256_WriteCmd(uint8_t _cmd){
 
 /*
 *********************************************************************************************************
-*	name: ADS1256_ReadChipID
-*	function: Read the chip ID
-*	parameter: _cmd : NULL
-*	The return value: four high status register
-*********************************************************************************************************
-*/
-uint8_t ADS1256_ReadChipID(void){
-	uint8_t id;
-
-	ADS1256_WaitDRDY();
-	id = ADS1256_ReadReg(REG_STATUS);
-	return (id >> 4);
-}
-
-/*
-*********************************************************************************************************
-*	name: ADS1256_SetChannal
+*	name: ADS1256_SetChannel
 *	function: Configuration channel number
 *	parameter:  _ch:  channel number  0--7
 *	The return value: NULL
 *********************************************************************************************************
 */
-static void ADS1256_SetChannal(uint8_t _ch){
+static void ADS1256_SetChannel(uint8_t _ch){
 	/*
 	Bits 7-4 PSEL3, PSEL2, PSEL1, PSEL0: Positive Input Channel (AINP) Select
 		0000 = AIN0 (default)
@@ -683,13 +610,13 @@ static void ADS1256_SetChannal(uint8_t _ch){
 
 /*
 *********************************************************************************************************
-*	name: ADS1256_SetDiffChannal
+*	name: ADS1256_SetDiffChannel
 *	function: The configuration difference channel
 *	parameter:  _ch:  channel number  0--3
 *	The return value:  four high status register
 *********************************************************************************************************
 */
-static void ADS1256_SetDiffChannal(uint8_t _ch){
+static void ADS1256_SetDiffChannel(uint8_t _ch){
 	/*
 	Bits 7-4 PSEL3, PSEL2, PSEL1, PSEL0: Positive Input Channel (AINP) Select
 		0000 = AIN0 (default)
@@ -749,7 +676,7 @@ static int32_t ADS1256_ReadData(void){
 
 	ADS1256_Send8Bit(CMD_RDATA);	/* read ADC command  */
 
-	ADS1256_DelayDATA();	/*delay time  */
+	bsp_DelayUS(10);	/*delay time  */
 
 	/*Read the sample results 24bit*/
     buf[0] = ADS1256_Recive8Bit();
@@ -802,57 +729,27 @@ int32_t ADS1256_GetAdc(uint8_t _ch){
 *********************************************************************************************************
 */
 void ADS1256_ISR(void){
-	if (g_tADS1256.ScanMode == 0)	/*  0  Single-ended input  8 channel�� 1 Differential input  4 channe */
+	ADS1256_SetDiffChannel(g_tADS1256.Channel);	/* change DiffChannel */
+	bsp_DelayUS(5);
+
+	ADS1256_WriteCmd(CMD_SYNC);
+	bsp_DelayUS(5);
+
+	ADS1256_WriteCmd(CMD_WAKEUP);
+	bsp_DelayUS(25);
+
+	if (g_tADS1256.Channel == 0)
 	{
-
-		ADS1256_SetChannal(g_tADS1256.Channel);	/*Switch channel mode */
-		bsp_DelayUS(5);
-
-		ADS1256_WriteCmd(CMD_SYNC);
-		bsp_DelayUS(5);
-
-		ADS1256_WriteCmd(CMD_WAKEUP);
-		bsp_DelayUS(25);
-
-		if (g_tADS1256.Channel == 0)
-		{
-			g_tADS1256.AdcNow[7] = ADS1256_ReadData();
-		}
-		else
-		{
-			g_tADS1256.AdcNow[g_tADS1256.Channel-1] = ADS1256_ReadData();
-		}
-
-		if (++g_tADS1256.Channel >= 8)
-		{
-			g_tADS1256.Channel = 0;
-		}
+		g_tADS1256.AdcNow[3] = ADS1256_ReadData();
 	}
-	else	/*DiffChannal*/
+	else
 	{
+		g_tADS1256.AdcNow[g_tADS1256.Channel-1] = ADS1256_ReadData();
+	}
 
-		ADS1256_SetDiffChannal(g_tADS1256.Channel);	/* change DiffChannal */
-		bsp_DelayUS(5);
-
-		ADS1256_WriteCmd(CMD_SYNC);
-		bsp_DelayUS(5);
-
-		ADS1256_WriteCmd(CMD_WAKEUP);
-		bsp_DelayUS(25);
-
-		if (g_tADS1256.Channel == 0)
-		{
-			g_tADS1256.AdcNow[3] = ADS1256_ReadData();
-		}
-		else
-		{
-			g_tADS1256.AdcNow[g_tADS1256.Channel-1] = ADS1256_ReadData();
-		}
-
-		if (++g_tADS1256.Channel >= 4)
-		{
-			g_tADS1256.Channel = 0;
-		}
+	if (++g_tADS1256.Channel >= 4)
+	{
+		g_tADS1256.Channel = 0;
 	}
 }
 
@@ -892,29 +789,6 @@ uint16_t Voltage_Convert(float Vref, float voltage){
 
 /*
 *********************************************************************************************************
-*	name: storeVoltage
-*	function:  Save voltage reading as csv with time stamp
-*	parameter: Vin : The voltage to be saved
-*
-*	The return value:  NULL
-*********************************************************************************************************
-*/
-void storeVoltage(int32_t Vin){
-	FILE * fp;
-	fp = fopen ("VoltageReadings.csv", "a+");
-
-	// store temperature and time
-	time_t t = time(NULL) + 36000; //current time in seconds adding 10 hours
-	struct tm tm = *localtime(&t);
-
-	fprintf(fp, "%d-%d-%d %d:%d:%d,%ld.%03ld\n", tm.tm_mday, tm.tm_mon + 1, tm.tm_year + 1900,
-	tm.tm_hour, tm.tm_min, tm.tm_sec, Vin / 1000000, (Vin%1000000)/1000);
-
-	fclose(fp);
-}
-
-/*
-*********************************************************************************************************
 *	name: ADS1256_DispVoltage
 *	function:  display voltage to terminal
 *	parameter: NULL
@@ -922,34 +796,45 @@ void storeVoltage(int32_t Vin){
 *	The return value:  NULL
 *********************************************************************************************************
 */
-static void ADS1256_DispVoltage(void){
-	uint8_t ch_num = 8; //number of channels
-	int32_t adc[ch_num];
-	int32_t volt[ch_num];
+static void ADS1256_DispVoltage(modbus_t *ctx){
 	int32_t Vin;
-	uint8_t i;
+	int32_t numChannels = 4;
+	int32_t adc[numChannels];
+	int32_t volt[numChannels];
+	uint16_t tab_reg[100];
+	int rc;
 
 	uint8_t buf[3];
 
-	while((ADS1256_Scan() == 0));
+	for(int i = 0; i <= numChannels; i++){
+		while((ADS1256_Scan() == 0));
+	}
 
-	for (i = 0; i < ch_num; i++)
-	{
-		adc[i] = ADS1256_GetAdc(i+6); //+6 to just read the last two channels
+	for(int i = 0; i < 2; i++){
+		adc[i] = ADS1256_GetAdc(i+2);
 		volt[i] = (adc[i] * 100) / 167;
+
+		Vin = volt[i] / 8 * ((1500 + 100000) / 1500); /* uV */
+		Vin = Vin * 1.0425; //multiply by error factor
+
+		if (Vin < 0){
+			Vin = -Vin;
+			printf("-%ld.%03ld %03ld V \n", Vin / 1000000, (Vin%1000000)/1000, Vin%1000);
+			Vin = Vin/100000;
+			tab_reg[0] = (uint16_t) Vin;
+			rc = modbus_write_registers(ctx, 1001+i, 1, tab_reg);
+			if(rc == -1){
+				fprintf(stderr,"%s\n", modbus_strerror(errno));
+			}
+		}
+		else{
+			printf("%ld.%03ld %03ld V \n", Vin / 1000000, (Vin%1000000)/1000, Vin%1000);
+			Vin = Vin/100000;
+			tab_reg[0] = (uint16_t) Vin;
+			rc = modbus_write_registers(ctx, 1001+i, 1, tab_reg);
+		}
 	}
 
-	Vin = (volt[1] - volt[0]) / 8 * ((1000 + 100000) / 1000); /* uV  */
-
-	if (Vin < 0){
-		Vin = -Vin;
-		printf("-%ld.%03ld %03ld V \n", Vin / 1000000, (Vin%1000000)/1000, Vin%1000);
-		storeVoltage(Vin);
-	}
-	else{
-		printf("%ld.%03ld %03ld V \n", Vin / 1000000, (Vin%1000000)/1000, Vin%1000);
-		storeVoltage(Vin);
-	}
 }
 
 /*
@@ -963,7 +848,13 @@ static void ADS1256_DispVoltage(void){
 */
 int  main()
 {
-	int mode = 0; //initiallize to LMP90100 data mode
+	int scanMode = 1; // 0 single ended mode : 1 differential mode
+	clock_t start_t, end_t, total_t;
+	modbus_t *ctx;
+	uint16_t tab_reg[100];
+	int rc;
+	int i;
+
   if (!bcm2835_init())
   	return 1;
 
@@ -974,8 +865,8 @@ int  main()
 	bcm2835_spi_setClockDivider(BCM2835_SPI_CLOCK_DIVIDER_8192);//default
 	bcm2835_aux_spi_setClockDivider(BCM2835_SPI_CLOCK_DIVIDER_2048);//default
 
-  bcm2835_gpio_fsel(SPICS_AUX, BCM2835_GPIO_FSEL_OUTP);//
-  bcm2835_gpio_write(SPICS_AUX, HIGH);
+	bcm2835_gpio_fsel(SPICS_AUX, BCM2835_GPIO_FSEL_OUTP);//
+	bcm2835_gpio_write(SPICS_AUX, HIGH);
 
 	LMP90100_Setup();
 
@@ -985,19 +876,42 @@ int  main()
 	bcm2835_gpio_set_pud(DRDY, BCM2835_GPIO_PUD_UP);
 
 	ADS1256_CfgADC(ADS1256_GAIN_1, ADS1256_15SPS);
-	ADS1256_StartScan(1);
+	ADS1256_StartScan(scanMode);
+
+	ctx = modbus_new_tcp("192.168.1.218", 502); //connect to dev board ip
+	if (ctx == NULL){
+		fprintf(stderr,"Unable to allocate libmodbus context\n");
+		return -1;
+	}
+
+	if(modbus_connect(ctx) == -1){
+		fprintf(stderr,"Connection failed: %s\n",modbus_strerror(errno));
+		modbus_free(ctx);
+		return -1;
+	}
+
+	tab_reg[0] = (uint16_t) 123;
+	rc = modbus_write_registers(ctx, 1000, 1, tab_reg);
+	if(rc == -1){
+		fprintf(stderr,"%s\n", modbus_strerror(errno));
+		return -1;
+	}
 
 	while(1)
 	{
-		LMP90100_DispTemp();
+		LMP90100_DispTemp(ctx);
 		bsp_DelayUS(1000000);
 
-		ADS1256_DispVoltage();
+		ADS1256_DispVoltage(ctx);
 		bsp_DelayUS(1000000);
+		printf("\33[%dA", 3);
 	}
 
+	bcm2835_spi_end();
 	bcm2835_aux_spi_end();
 	bcm2835_close();
+	modbus_close(ctx);
+	modbus_free(ctx);
 
 	return 0;
 }

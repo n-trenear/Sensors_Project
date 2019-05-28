@@ -252,29 +252,6 @@ static float LMP90100_ReadADC(void)
 
 /*
 *********************************************************************************************************
-*	name: storeTemp
-*	function:  Save temperature reading as csv with time stamp
-*	parameter: Vin : The temperature to be saved
-*
-*	The return value:  NULL
-*********************************************************************************************************
-*/
-void storeTemp(float temp){
-	FILE * fp;
-	fp = fopen ("TemperatureReadings.csv", "a+");
-
-	// store temperature and time
-	time_t t = time(NULL);
-	struct tm tm = *localtime(&t);
-
-	fprintf(fp, "%d-%d-%d %d:%d:%d,%3.1f\n", tm.tm_mday, tm.tm_mon + 1, tm.tm_year + 1900,
-	tm.tm_hour, tm.tm_min, tm.tm_sec, temp);
-
-	fclose(fp);
-}
-
-/*
-*********************************************************************************************************
 *	name: LMP90100_DRDY
 *	function: Detect ADC ready pulse on MISO line and initate ADC read and ADC channel number read
 *	parameter: NULL
@@ -291,18 +268,14 @@ static unsigned int LMP90100_DRDY (modbus_t *ctx)
 	uint16_t tab_reg[100];
 	int modbus_register = 3;
 	int rc;
-	//printf("LMP90100_DRDY running \n");
 
 	while(!result){
 	if (DRDY_AUX_IS_LOW() && CS_AUX_IS_LOW())
 	{
-	//printf("DRDY AND CS LOW\n");
   	if (ctr > 1)
     {
-	//printf("ctr > 1 \n");
 		Temp_Reading = LMP90100_ReadADC();
 		Channel = LMP90100_ReadChannel();
-      //printf("Ch:%02X Temp: %3.1f \r",Channel,Temp_Reading);
 		printf("Ch:%d Temp: %3.1f \n",Channel,Temp_Reading);
 		Temp_Reading = Temp_Reading * 10;
 		tab_reg[0] = (uint16_t) Temp_Reading;
@@ -319,12 +292,10 @@ static unsigned int LMP90100_DRDY (modbus_t *ctx)
 
 	if (DRDY_AUX_IS_HIGH() && CS_AUX_IS_LOW())
 	{
-		//printf("DRDY high CS low\n");
 		ctr++;
 	}
 	if (DRDY_AUX_IS_HIGH() && CS_AUX_IS_HIGH() && (ctr >= 1))
 	{
-		//printf("DRDY low CS high\n");
 		ctr = 0;
 	}
 }
@@ -552,22 +523,6 @@ void ADS1256_CfgADC(ADS1256_GAIN_E _gain, ADS1256_DRATE_E _drate){
 
 /*
 *********************************************************************************************************
-*	name: ADS1256_DelayDATA
-*	function: delay
-*	parameter: NULL
-*	The return value: NULL
-*********************************************************************************************************
-*/
-static void ADS1256_DelayDATA(void){
-	/*
-		Delay from last SCLK edge for DIN to first SCLK rising edge for DOUT: RDATA, RDATAC,RREG Commands
-		min  50   CLK = 50 * 0.13uS = 6.5uS
-	*/
-	bsp_DelayUS(10);	/* The minimum time delay 6.5us */
-}
-
-/*
-*********************************************************************************************************
 *	name: ADS1256_Recive8Bit
 *	function: SPI bus receive function
 *	parameter: NULL
@@ -721,7 +676,7 @@ static int32_t ADS1256_ReadData(void){
 
 	ADS1256_Send8Bit(CMD_RDATA);	/* read ADC command  */
 
-	ADS1256_DelayDATA();	/*delay time  */
+	bsp_DelayUS(10);	/*delay time  */
 
 	/*Read the sample results 24bit*/
     buf[0] = ADS1256_Recive8Bit();
@@ -774,56 +729,27 @@ int32_t ADS1256_GetAdc(uint8_t _ch){
 *********************************************************************************************************
 */
 void ADS1256_ISR(void){
-	if (g_tADS1256.ScanMode == 0)	/*  0  Single-ended input  8 channel�� 1 Differential input  4 channel */
+	ADS1256_SetDiffChannel(g_tADS1256.Channel);	/* change DiffChannel */
+	bsp_DelayUS(5);
+
+	ADS1256_WriteCmd(CMD_SYNC);
+	bsp_DelayUS(5);
+
+	ADS1256_WriteCmd(CMD_WAKEUP);
+	bsp_DelayUS(25);
+
+	if (g_tADS1256.Channel == 0)
 	{
-		ADS1256_SetChannel(g_tADS1256.Channel);	/*Switch channel mode */
-		bsp_DelayUS(5);
-
-		ADS1256_WriteCmd(CMD_SYNC);
-		bsp_DelayUS(5);
-
-		ADS1256_WriteCmd(CMD_WAKEUP);
-		bsp_DelayUS(25);
-
-		if (g_tADS1256.Channel == 0)
-		{
-			g_tADS1256.AdcNow[7] = ADS1256_ReadData();
-		}
-		else
-		{
-			g_tADS1256.AdcNow[g_tADS1256.Channel-1] = ADS1256_ReadData();
-		}
-
-		if (++g_tADS1256.Channel >= 8)
-		{
-			g_tADS1256.Channel = 0;
-		}
+		g_tADS1256.AdcNow[3] = ADS1256_ReadData();
 	}
-	else	/*DiffChannel*/
+	else
 	{
+		g_tADS1256.AdcNow[g_tADS1256.Channel-1] = ADS1256_ReadData();
+	}
 
-		ADS1256_SetDiffChannel(g_tADS1256.Channel);	/* change DiffChannel */
-		bsp_DelayUS(5);
-
-		ADS1256_WriteCmd(CMD_SYNC);
-		bsp_DelayUS(5);
-
-		ADS1256_WriteCmd(CMD_WAKEUP);
-		bsp_DelayUS(25);
-
-		if (g_tADS1256.Channel == 0)
-		{
-			g_tADS1256.AdcNow[3] = ADS1256_ReadData();
-		}
-		else
-		{
-			g_tADS1256.AdcNow[g_tADS1256.Channel-1] = ADS1256_ReadData();
-		}
-
-		if (++g_tADS1256.Channel >= 4)
-		{
-			g_tADS1256.Channel = 0;
-		}
+	if (++g_tADS1256.Channel >= 4)
+	{
+		g_tADS1256.Channel = 0;
 	}
 }
 
@@ -859,29 +785,6 @@ uint16_t Voltage_Convert(float Vref, float voltage){
 	_D_ = (uint16_t)(65536 * voltage / Vref);
 
 	return _D_;
-}
-
-/*
-*********************************************************************************************************
-*	name: storeVoltage
-*	function:  Save voltage reading as csv with time stamp
-*	parameter: Vin : The voltage to be saved
-*
-*	The return value:  NULL
-*********************************************************************************************************
-*/
-void storeVoltage(int32_t Vin){
-	FILE * fp;
-	fp = fopen ("VoltageReadings.csv", "a+");
-
-	// store temperature and time
-	time_t t = time(NULL) + 36000; //current time in seconds adding 10 hours
-	struct tm tm = *localtime(&t);
-
-	fprintf(fp, "%d-%d-%d %d:%d:%d,%ld.%03ld\n", tm.tm_mday, tm.tm_mon + 1, tm.tm_year + 1900,
-	tm.tm_hour, tm.tm_min, tm.tm_sec, Vin / 1000000, (Vin%1000000)/1000);
-
-	fclose(fp);
 }
 
 /*
@@ -951,7 +854,7 @@ int  main()
 	uint16_t tab_reg[100];
 	int rc;
 	int i;
-	
+
   if (!bcm2835_init())
   	return 1;
 
