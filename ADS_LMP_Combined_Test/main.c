@@ -99,21 +99,12 @@ static void ADS1256_DispVoltage(modbus_t *ctx){
 		Vin = volt[i] / 8 * ((1500 + 100000) / 1500); /* uV */
 		Vin = Vin * 1.0425; //multiply by error factor
 
-		if (Vin < 0){
-			Vin = -Vin;
-			printf("-%ld.%03ld %03ld V \n", Vin / 1000000, (Vin%1000000)/1000, Vin%1000);
-			Vin = Vin/100000;
-			tab_reg[0] = (uint16_t) Vin;
-			rc = modbus_write_registers(ctx, 1001+i, 1, tab_reg);
-			if(rc == -1){
-				fprintf(stderr,"%s\n", modbus_strerror(errno));
-			}
-		}
-		else{
-			printf("%ld.%03ld %03ld V \n", Vin / 1000000, (Vin%1000000)/1000, Vin%1000);
-			Vin = Vin/100000;
-			tab_reg[0] = (uint16_t) Vin;
-			rc = modbus_write_registers(ctx, 1001+i, 1, tab_reg);
+		printf("%ld uV \n", Vin);
+		Vin = Vin/100000;
+		tab_reg[0] = (uint16_t) Vin;
+		rc = modbus_write_registers(ctx, 1001+i, 1, tab_reg);
+		if(rc == -1){
+			fprintf(stderr,"%s\n", modbus_strerror(errno));
 		}
 	}
 
