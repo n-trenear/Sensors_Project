@@ -19,11 +19,10 @@
 #include "ADS1256.h"
 #include "LMP90100.h"
 
-#define SW1 4
-#define SW2 27
+#define SW1 23
+#define SW2 24
 #define SW3 18
 #define SW4 5
-#define FB1A 25
 
 #define SW1_1() bcm2835_gpio_write(SW1, HIGH)
 #define SW1_0() bcm2835_gpio_write(SW1, LOW)
@@ -140,17 +139,25 @@ int  main()
   if (!bcm2835_init())
   	return 1;
 
-	bcm2835_spi_begin();
+	bcm2835_spi_begin(
 	bcm2835_aux_spi_begin();
+	printf("aux begin passed\n");
 	bcm2835_spi_setBitOrder(BCM2835_SPI_BIT_ORDER_MSBFIRST);   //default
+	printf("bit order set\n");
 	bcm2835_spi_setDataMode(BCM2835_SPI_MODE1);
+	printf("data mode set\n");
 	bcm2835_spi_setClockDivider(BCM2835_SPI_CLOCK_DIVIDER_8192);//default
+	printf("clock divider set\n");
 	bcm2835_aux_spi_setClockDivider(BCM2835_SPI_CLOCK_DIVIDER_2048);//default
+	printf("aux clock divider set\n");
 
 	bcm2835_gpio_fsel(SPICS_AUX, BCM2835_GPIO_FSEL_OUTP);//
+	printf("gpio fsel\n");
 	bcm2835_gpio_write(SPICS_AUX, HIGH);
+	printf("cs set high\n");
 
 	LMP90100_Setup();
+	printf("lmp setup\n");
 
 	bcm2835_gpio_fsel(SPICS, BCM2835_GPIO_FSEL_OUTP);
 	bcm2835_gpio_write(SPICS, HIGH);
@@ -159,14 +166,7 @@ int  main()
 
 	ADS1256_CfgADC(ADS1256_GAIN_1, ADS1256_15SPS);
 	ADS1256_StartScan(scanMode);
-
-	bcm2835_gpio_fsel(SW1, BCM2835_GPIO_FSEL_OUTP);
-	bcm2835_gpio_fsel(SW2, BCM2835_GPIO_FSEL_OUTP);
-	bcm2835_gpio_fsel(SW3, BCM2835_GPIO_FSEL_OUTP);
-	bcm2835_gpio_fsel(SW4, BCM2835_GPIO_FSEL_OUTP);
-
-	bcm2835_gpio_fsel(FB1A, BCM2835_GPIO_FSEL_OUTP);
-	bcm2835_gpio_set_pud(FB1A, BCM2835_GPIO_PUD_UP);
+	printf("ads set up\n");
 
 	ctx = modbus_new_tcp("192.168.1.218", 502); //connect to dev board ip
 	if (ctx == NULL){
@@ -186,29 +186,26 @@ int  main()
 		fprintf(stderr,"%s\n", modbus_strerror(errno));
 		return -1;
 	}
+	printf("modbus set up\n");
 
 	while(1)
 	{
+		printf("while loop started\n");
 		LMP90100_DispTemp(ctx);
-/*		SW1_1();
+		printf("collected temperature\n");
+		SW1_1();
 		SW2_1();
 		SW3_1();
 		SW4_1();
-		if(bcm2835_gpio_lev(FB1A)){
-			printf("FB1A high\n");
-		}*/
 		bcm2835_delayMicroseconds(1000000);
 
 		ADS1256_DispVoltage(ctx);
-/*		SW1_0();
+		SW1_0();
 		SW2_0();
 		SW3_0();
 		SW4_0();
-		if(!bcm2835_gpio_lev(FB1A)){
-			printf("FB1A low\n");
-		}*/
 		bcm2835_delayMicroseconds(1000000);
-		printf("\33[%dA", 3);
+		printf("\33[%dA", 4);
 	}
 
 	bcm2835_spi_end();

@@ -106,7 +106,7 @@ unsigned int LMP90100_DRDY (modbus_t *ctx)
 	while(!result){
 	if (DRDY_AUX_IS_LOW() && CS_AUX_IS_LOW())
 	{
-  	if (ctr > 1)
+  	if (ctr >= 1)
     {
 		Temp_Reading = LMP90100_ReadADC();
 		Channel = LMP90100_ReadChannel();
@@ -132,7 +132,7 @@ unsigned int LMP90100_DRDY (modbus_t *ctx)
 	{
 		ctr = 0;
 	}
-}
+	}
 
 	return result;
 }
