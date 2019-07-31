@@ -101,15 +101,15 @@ static void ADS1256_DispVoltage(modbus_t *ctx){
 		if (Vin < 0){
 			SW1_0(); //Disconnect the contactor.
 			
-			Vin = Vin/100000;
+			Vin = -Vin;
+			printf("-%ld.%03ld %03ld V \n", Vin / 1000000, (Vin%1000000)/1000, Vin%1000);
+			
+			Vin = -Vin/100000;
 			tab_reg[0] = (uint16_t) Vin;
 			rc = modbus_write_registers(ctx, 1005, 1, tab_reg);
 			if(rc == -1){
 				fprintf(stderr,"%s\n", modbus_strerror(errno));
 			}
-			
-			Vin = -Vin;
-			printf("-%ld.%03ld %03ld V \n", Vin / 1000000, (Vin%1000000)/1000, Vin%1000);
 		}
 		else{
 			SW1_1(); //Connect the contactor.

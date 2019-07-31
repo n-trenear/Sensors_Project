@@ -136,7 +136,7 @@ void setChannel(int channel){
 
 	bcm2835_aux_spi_transfern(buf, 8);
 
-	bcm2835_delayMicroseconds(100000);
+	bcm2835_delayMicroseconds(100000); //Let the current to the channel settle
 }
 
 /*
