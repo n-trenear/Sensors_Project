@@ -122,16 +122,6 @@ static void ADS1256_DispVoltage(modbus_t *ctx){
 
 /*
 *********************************************************************************************************
-*	name: ADS1256_DispVoltage
-*	function:  display voltage to terminal
-*	parameter: NULL
-*
-*	The return value:  NULL
-*********************************************************************************************************
-*/
-
-/*
-*********************************************************************************************************
 *	name:  main
 *	Setup SPI device then collect Temperature and ADC channel and print values on screen.
 *	parameter: NULL
