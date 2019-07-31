@@ -19,10 +19,11 @@
 #include "ADS1256.h"
 #include "LMP90100.h"
 
-#define SW1 23
-#define SW2 24
+#define SW1 4
+#define SW2 27
 #define SW3 18
 #define SW4 5
+#define FB1A 25
 
 #define SW1_1() bcm2835_gpio_write(SW1, HIGH)
 #define SW1_0() bcm2835_gpio_write(SW1, LOW)
@@ -35,7 +36,6 @@
 
 #define SW4_1() bcm2835_gpio_write(SW4, HIGH)
 #define SW4_0() bcm2835_gpio_write(SW4, LOW)
-
 /*
 *********************************************************************************************************
 *	name: LMP90100_DispTemp
@@ -48,7 +48,7 @@
 static void LMP90100_DispTemp(modbus_t *ctx){
 		unsigned int cs_state = 1;
 
-		//if (LMP90100_DRDY())
+		//if (LMP90100_DRDY(ctx))
 		if (cs_state == 1)
 		{
 			CS_AUX_0();
@@ -79,7 +79,7 @@ static void LMP90100_DispTemp(modbus_t *ctx){
 */
 static void ADS1256_DispVoltage(modbus_t *ctx){
 	int32_t Vin;
-	int32_t numChannels = 4;
+	int32_t numChannels = 1;
 	int32_t adc[numChannels];
 	int32_t volt[numChannels];
 	uint16_t tab_reg[100];
@@ -91,32 +91,44 @@ static void ADS1256_DispVoltage(modbus_t *ctx){
 		while((ADS1256_Scan() == 0));
 	}
 
-	for(int i = 0; i < 2; i++){
-		adc[i] = ADS1256_GetAdc(i+2);
+	for(int i = 0; i < 1; i++){
+		adc[i] = ADS1256_GetAdc(i);
 		volt[i] = (adc[i] * 100) / 167;
 
 		Vin = volt[i] / 8 * ((1500 + 100000) / 1500); /* uV */
 		Vin = Vin * 1.0425; //multiply by error factor
 
 		if (Vin < 0){
+			SW1_0(); //Disconnect the contactor.
 			Vin = -Vin;
 			printf("-%ld.%03ld %03ld V \n", Vin / 1000000, (Vin%1000000)/1000, Vin%1000);
 			Vin = Vin/100000;
 			tab_reg[0] = (uint16_t) Vin;
-			rc = modbus_write_registers(ctx, 1001+i, 1, tab_reg);
+			rc = modbus_write_registers(ctx, 1005, 1, tab_reg);
 			if(rc == -1){
 				fprintf(stderr,"%s\n", modbus_strerror(errno));
 			}
 		}
 		else{
+			SW1_1(); //Connect the contactor.
 			printf("%ld.%03ld %03ld V \n", Vin / 1000000, (Vin%1000000)/1000, Vin%1000);
 			Vin = Vin/100000;
 			tab_reg[0] = (uint16_t) Vin;
-			rc = modbus_write_registers(ctx, 1001+i, 1, tab_reg);
+			rc = modbus_write_registers(ctx, 1005, 1, tab_reg);
 		}
 	}
 
 }
+
+/*
+*********************************************************************************************************
+*	name: ADS1256_DispVoltage
+*	function:  display voltage to terminal
+*	parameter: NULL
+*
+*	The return value:  NULL
+*********************************************************************************************************
+*/
 
 /*
 *********************************************************************************************************
@@ -139,34 +151,33 @@ int  main()
   if (!bcm2835_init())
   	return 1;
 
-	bcm2835_spi_begin(
+	bcm2835_spi_begin();
 	bcm2835_aux_spi_begin();
-	printf("aux begin passed\n");
 	bcm2835_spi_setBitOrder(BCM2835_SPI_BIT_ORDER_MSBFIRST);   //default
-	printf("bit order set\n");
 	bcm2835_spi_setDataMode(BCM2835_SPI_MODE1);
-	printf("data mode set\n");
 	bcm2835_spi_setClockDivider(BCM2835_SPI_CLOCK_DIVIDER_8192);//default
-	printf("clock divider set\n");
 	bcm2835_aux_spi_setClockDivider(BCM2835_SPI_CLOCK_DIVIDER_2048);//default
-	printf("aux clock divider set\n");
 
 	bcm2835_gpio_fsel(SPICS_AUX, BCM2835_GPIO_FSEL_OUTP);//
-	printf("gpio fsel\n");
 	bcm2835_gpio_write(SPICS_AUX, HIGH);
-	printf("cs set high\n");
 
 	LMP90100_Setup();
-	printf("lmp setup\n");
 
-	bcm2835_gpio_fsel(SPICS, BCM2835_GPIO_FSEL_OUTP);
+	bcm2835_gpio_fsel(SPICS, BCM2835_GPIO_FSEL_OUTP);//
 	bcm2835_gpio_write(SPICS, HIGH);
 	bcm2835_gpio_fsel(DRDY, BCM2835_GPIO_FSEL_INPT);
 	bcm2835_gpio_set_pud(DRDY, BCM2835_GPIO_PUD_UP);
 
 	ADS1256_CfgADC(ADS1256_GAIN_1, ADS1256_15SPS);
 	ADS1256_StartScan(scanMode);
-	printf("ads set up\n");
+
+	bcm2835_gpio_fsel(SW1, BCM2835_GPIO_FSEL_OUTP);	
+	bcm2835_gpio_fsel(SW2, BCM2835_GPIO_FSEL_OUTP);
+	bcm2835_gpio_fsel(SW3, BCM2835_GPIO_FSEL_OUTP);
+	bcm2835_gpio_fsel(SW4, BCM2835_GPIO_FSEL_OUTP);
+
+	bcm2835_gpio_fsel(FB1A, BCM2835_GPIO_FSEL_INPT);
+	bcm2835_gpio_set_pud(FB1A, BCM2835_GPIO_PUD_UP);
 
 	ctx = modbus_new_tcp("192.168.1.218", 502); //connect to dev board ip
 	if (ctx == NULL){
@@ -186,26 +197,13 @@ int  main()
 		fprintf(stderr,"%s\n", modbus_strerror(errno));
 		return -1;
 	}
-	printf("modbus set up\n");
 
 	while(1)
 	{
-		printf("while loop started\n");
 		LMP90100_DispTemp(ctx);
-		printf("collected temperature\n");
-		SW1_1();
-		SW2_1();
-		SW3_1();
-		SW4_1();
-		bcm2835_delayMicroseconds(1000000);
-
 		ADS1256_DispVoltage(ctx);
-		SW1_0();
-		SW2_0();
-		SW3_0();
-		SW4_0();
 		bcm2835_delayMicroseconds(1000000);
-		printf("\33[%dA", 4);
+		printf("\33[%dA", 5);
 	}
 
 	bcm2835_spi_end();

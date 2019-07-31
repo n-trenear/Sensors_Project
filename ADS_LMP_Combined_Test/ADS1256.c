@@ -15,7 +15,6 @@
 #include <stdlib.h>
 #include <math.h>
 #include <errno.h>
-#include <modbus.h>
 #include "ADS1256.h"
 
 //#define  DRDY  RPI_V2_GPIO_P1_11 //P0
