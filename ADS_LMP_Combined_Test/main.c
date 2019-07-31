@@ -137,6 +137,7 @@ int  main()
 	uint16_t tab_reg[100];
 	int rc;
 	int i;
+	int ctr;
 
   if (!bcm2835_init())
   	return 1;
@@ -189,10 +190,19 @@ int  main()
 	}
 
 	while(1)
-	{
-		LMP90100_DispTemp(ctx);
-		ADS1256_DispVoltage(ctx);
-		printf("\33[%dA", 5);
+	{		
+		if(ctr == 10){
+			ctr = 0;
+			LMP90100_DispTemp(ctx);
+			ADS1256_DispVoltage(ctx);
+			printf("\33[%dA", 5);
+		}		
+		
+		else{
+			ctr++;
+			ADS1256_DispVoltage(ctx);
+			printf("\33[%dA", 1);
+		}
 	}
 
 	bcm2835_spi_end();
