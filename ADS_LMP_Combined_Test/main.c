@@ -137,7 +137,7 @@ int  main()
 	uint16_t tab_reg[100];
 	int rc;
 	int i;
-	int ctr;
+	int ctr = -1;
 
   if (!bcm2835_init())
   	return 1;
@@ -191,7 +191,7 @@ int  main()
 
 	while(1)
 	{		
-		if(ctr == 10){
+		if(ctr == 10 || ctr == -1){
 			ctr = 0;
 			LMP90100_DispTemp(ctx);
 			ADS1256_DispVoltage(ctx);
