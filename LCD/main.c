@@ -50,8 +50,8 @@ void main(void){
 	tcsetattr(uart0_filestream, TCSANOW, &options);
 	
 	//----- TX BYTES -----
-	uint8_t tx_buffer[20];
-	uint8_t *p_tx_buffer;
+	unsigned int tx_buffer[20];
+	unsigned int *p_tx_buffer;
 	
 	p_tx_buffer = &tx_buffer[0];
 	*p_tx_buffer++ = 0xFE;
